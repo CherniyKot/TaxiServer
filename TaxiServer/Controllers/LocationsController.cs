@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,16 +24,20 @@ namespace TaxiServer.Controllers
         }
 
         [HttpGet]
-        public IEnumerable<DriverLocation_> DriverLocations()
+        public IEnumerable<DriverLocation_> FreeDriversLocations()
         {
-            IEnumerable<DriverLocation_> result = db.DriverLocations.Where(d => d.Driver.IsOnline && (d.Time ?? DateTime.Now) >= DateTime.Now.AddMinutes(-5)).Select(d => new DriverLocation_()
-            {
-                DriverID = d.Driver.Id,
-                DriverName = d.Driver.Name,
-                DriverCar = d.Driver.Car,
-                Latitude = d.Location.X,
-                Longitude = d.Location.Y
-            }).ToArray();
+            IEnumerable<DriverLocation_> result = db.DriverLocations.Where(
+                d => d.Driver.IsOnline &&
+                (d.Time ?? DateTime.Now) >= DateTime.Now.AddMinutes(-5) &&
+                d.Driver.Orders.Where(e => e.Status == 1 || e.Status == 2).Count() == 0).Select(
+                d => new DriverLocation_()
+                {
+                    DriverID = d.Driver.Id,
+                    DriverName = d.Driver.Name,
+                    DriverCar = d.Driver.Car,
+                    Latitude = d.Location.X,
+                    Longitude = d.Location.Y
+                }).ToArray();
             return result;
         }
 
@@ -83,6 +88,29 @@ namespace TaxiServer.Controllers
                 LatitudeTo = t1.LocationTo.X,
                 LongitudeFrom = t1.LocationTo.Y
             };
+        }
+
+
+        [HttpPost]
+        public int CreateOrder([FromForm] int userId, [FromForm] double longitudeFrom, [FromForm] double latitudeFrom, [FromForm] double longitudeTo, [FromForm] double latitudeTo)
+        {
+            var conn = new SqlConnection("Server=(localdb)\\mssqllocaldb;Database=Taxi;Trusted_Connection=True;");
+            conn.Open();
+            SqlCommand myCommand = new SqlCommand($"insert into dbo.Orders values({userId}, geography::STGeomFromText('Point({longitudeFrom.ToString().Replace(',', '.')} {latitudeFrom.ToString().Replace(',', '.')})', 4326), geography::STGeomFromText('Point({longitudeTo.ToString().Replace(',', '.') } {latitudeTo.ToString().Replace(',', '.')})', 4326), null, 1)", conn);
+            var r = myCommand.ExecuteNonQuery();
+            conn.Dispose();
+            return r;
+        }
+
+        [HttpPost]
+        public int Connect([FromForm] int orderId, [FromForm] int driverId)
+        {
+            var conn = new SqlConnection("Server=(localdb)\\mssqllocaldb;Database=Taxi;Trusted_Connection=True;");
+            conn.Open();
+            SqlCommand myCommand = new SqlCommand($"update dbo.Orders set DriverID={driverId}, Status=2 where ID={orderId}", conn);
+            var r = myCommand.ExecuteNonQuery();
+            conn.Dispose();
+            return r;
         }
     }
 }
