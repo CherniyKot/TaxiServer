@@ -19,6 +19,7 @@ namespace TaxiServer
         public Point LocationTo { get; set; }
         public int? DriverId { get; set; }
         public int? Status { get; set; }
+        public double Cost { get; set; }
 
         public virtual Driver Driver { get; set; }
         public virtual User User { get; set; }

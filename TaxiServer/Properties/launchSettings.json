@@ -20,8 +20,8 @@
     "TaxiServer": {
       "commandName": "Project",
       "launchBrowser": true,
-      "launchUrl": "Api/DriverLocations",
-      "applicationUrl": "https://localhost:5001;http://localhost:5000",
+      "launchUrl": "Api/FreeDriversLocations",
+      "applicationUrl": "https://localhost:44368",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

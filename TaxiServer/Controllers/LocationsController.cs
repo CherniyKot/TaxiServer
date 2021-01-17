@@ -57,57 +57,103 @@ namespace TaxiServer.Controllers
         }
 
         [HttpGet]
-        public DriverLocation_ DriverLocation(int userId)
+        public OrderStatus UserOrder(int userId)
         {
-            var t = db.Orders.Where(d => d.Status == 1 && d.UserId == userId).First();
-            if (t.DriverId == null) return null;
-
-            return new DriverLocation_()
+            var t = db.Orders.Where(d => d.Status.HasValue && d.Status < 4 && d.UserId == userId).ToArray().FirstOrDefault();
+            if (t == null) return new OrderStatus();
+            var r = new OrderStatus()
             {
-                DriverID = t.Driver.Id,
-                DriverName = t.Driver.Name,
-                DriverCar = t.Driver.Car,
-                Latitude = t.Driver.DriverLocation.Location.X,
-                Longitude = t.Driver.DriverLocation.Location.Y
+                Status = t.Status.Value,
+                LatitudeFrom = t.LocationFrom.X,
+                LongitudeTo = t.LocationFrom.Y,
+                LatitudeTo = t.LocationTo.X,
+                LongitudeFrom = t.LocationTo.Y,
+                Cost = t.Cost
             };
+
+            var t1 = db.Drivers.Where(d => d.Id == t.DriverId).Select(d=>d.DriverLocation).ToArray().FirstOrDefault();
+            if (t1 != null)
+            {
+                r.LatitudeDriver = t1.Location.X;
+                r.LongitudeDriver = t1.Location.Y;
+            }
+            return r;
         }
 
         [HttpGet]
-        public OrderLocation_ OrderLocation(int driverId)
+        public OrderStatus DriverOrder(int driverId)
         {
-            var t = db.Orders.Where(d => d.Status == 1 && d.DriverId == driverId);
-            if (t.Count() == 0) return null;
-            var t1 = t.First();
-
-            return new OrderLocation_()
+            var t = db.Orders.Where(d => d.Status.HasValue && d.Status < 4 && d.DriverId == driverId).ToArray().FirstOrDefault();
+            if (t == null) return new OrderStatus();
+            var r = new OrderStatus()
             {
-                OrderID = t1.Id,
-                UserName = t1.User.Name,
-                LatitudeFrom = t1.LocationFrom.X,
-                LongitudeTo = t1.LocationFrom.Y,
-                LatitudeTo = t1.LocationTo.X,
-                LongitudeFrom = t1.LocationTo.Y
+                Status = t.Status.Value,
+                LatitudeFrom = t.LocationFrom.X,
+                LongitudeTo = t.LocationFrom.Y,
+                LatitudeTo = t.LocationTo.X,
+                LongitudeFrom = t.LocationTo.Y,
+                Cost = t.Cost
             };
-        }
 
+            var t1 = db.Drivers.Where(d => d.Id == t.DriverId).Select(d => d.DriverLocation).ToArray().FirstOrDefault();
+            if (t1 != null)
+            {
+                r.LatitudeDriver = t1.Location.X;
+                r.LongitudeDriver = t1.Location.Y;
+            }
+            return r;
+        }
 
         [HttpPost]
         public int CreateOrder([FromForm] int userId, [FromForm] double longitudeFrom, [FromForm] double latitudeFrom, [FromForm] double longitudeTo, [FromForm] double latitudeTo)
         {
+            if (db.Orders.Any(e => e.UserId==userId && e.Status != 4)) return -1;
             var conn = new SqlConnection("Server=(localdb)\\mssqllocaldb;Database=Taxi;Trusted_Connection=True;");
             conn.Open();
-            SqlCommand myCommand = new SqlCommand($"insert into dbo.Orders values({userId}, geography::STGeomFromText('Point({longitudeFrom.ToString().Replace(',', '.')} {latitudeFrom.ToString().Replace(',', '.')})', 4326), geography::STGeomFromText('Point({longitudeTo.ToString().Replace(',', '.') } {latitudeTo.ToString().Replace(',', '.')})', 4326), null, 1)", conn);
+            SqlCommand myCommand = new SqlCommand($"insert into dbo.Orders values({userId}, geography::STGeomFromText('Point({longitudeFrom.ToString("F9").Replace(',', '.')} {latitudeFrom.ToString("F9").Replace(',', '.')})', 4326), geography::STGeomFromText('Point({longitudeTo.ToString("F9").Replace(',', '.') } {latitudeTo.ToString("F9").Replace(',', '.')})', 4326), null, 1, 0)", conn);
             var r = myCommand.ExecuteNonQuery();
             conn.Dispose();
             return r;
         }
 
         [HttpPost]
-        public int Connect([FromForm] int orderId, [FromForm] int driverId)
+        public int Connect([FromForm] int orderId, [FromForm] int driverId, [FromForm] double cost)
         {
             var conn = new SqlConnection("Server=(localdb)\\mssqllocaldb;Database=Taxi;Trusted_Connection=True;");
             conn.Open();
-            SqlCommand myCommand = new SqlCommand($"update dbo.Orders set DriverID={driverId}, Status=2 where ID={orderId}", conn);
+            SqlCommand myCommand = new SqlCommand($"update dbo.Orders set DriverID={driverId}, Cost={cost.ToString().Replace(',', '.')}, Status=2 where ID={orderId}", conn);
+            var r = myCommand.ExecuteNonQuery();
+            conn.Dispose();
+            return r;
+        }
+
+        [HttpPost]
+        public int UpdateLocation([FromForm] int driverId, [FromForm] double longitude, [FromForm] double latitude)
+        {
+            var conn = new SqlConnection("Server=(localdb)\\mssqllocaldb;Database=Taxi;Trusted_Connection=True;");
+            conn.Open();
+            SqlCommand myCommand = new SqlCommand($"update DriverLocations set Time='{DateTime.Now.ToString("s")}', Location=geography::STGeomFromText('Point({longitude.ToString("F9").Replace(',', '.')} {latitude.ToString("F9").Replace(',', '.')})', 4326) where DriverID={driverId}", conn);
+            var r = myCommand.ExecuteNonQuery();
+            conn.Dispose();
+            return r;
+        }
+
+        [HttpPost]
+        public int SetOrderStatus([FromForm] int driverId, [FromForm] int orderStatus)
+        {
+            var conn = new SqlConnection("Server=(localdb)\\mssqllocaldb;Database=Taxi;Trusted_Connection=True;");
+            conn.Open();
+            SqlCommand myCommand = new SqlCommand($"update Orders set Status={orderStatus} where Status<4 and DriverID={driverId}", conn);
+            var r = myCommand.ExecuteNonQuery();
+            conn.Dispose();
+            return r;
+        }
+        [HttpPost]
+        public int CancelOrder([FromForm] int userId)
+        {
+            var conn = new SqlConnection("Server=(localdb)\\mssqllocaldb;Database=Taxi;Trusted_Connection=True;");
+            conn.Open();
+            SqlCommand myCommand = new SqlCommand($"update Orders set Status=5 where Status<4 and UserId={userId}", conn);
             var r = myCommand.ExecuteNonQuery();
             conn.Dispose();
             return r;
